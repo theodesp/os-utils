@@ -14,3 +14,4 @@ qemu-system-{your architecture} boot_{target}.bin
 * boot_sector: Constructs an empty bootable sector that does nothing
 * boot_hello_world: Constructs a bootable sector that prints "hello" using the
 BIOS teletype output. See [BIOS interrupts](https://en.wikipedia.org/wiki/INT_10H)
+* boot_stack_hello_world: Constructs a bootable sector that prints "hello" with the help of the stack.
