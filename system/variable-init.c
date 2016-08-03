@@ -1,4 +1,6 @@
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
 
 // If an object that has static storage duration is not initialized explicitly, then:
@@ -40,14 +42,70 @@
 int a;          //a = 0, global objects have static storage duration
 static int b;   //b = 0, global static objects have static storage duration
 
-void func() {
+int func() {
     static int c;    //c = 0, static objects have static storage duration
-    int d;          // d = 0 local objects are not always init to default values
+    int d;          // d = <junk> is an error to assume that it will always be initialized to zero.
     printf("%d %d %d %d\n", a, b, c, d); // Prints 0 0 0 <junk>
+    
+    // Automatic variables are bound to stack memory only for the lifetime of the function. 
+    // After the function returns it is an error to continue to use the memory.
+    // So we cannot return &d;
 }
+
+void func2() {
+    // Heap allocations using malloc are not automatically initialized to zero.
+    int* ptr1 = malloc( sizeof(int) );
+    
+    // Behaves like malloc as the ptr is NULL
+    int* ptr2 = realloc(NULL, sizeof(int) ); 
+    
+    // The function calloc() will allocate a block of memory for an array.
+    // During the initialization all bits are set to zero.
+    int* ptr3 = calloc( 1, sizeof(int) );
+    int* ptr4 = calloc( sizeof(int) , 1);
+                                         
+
+    printf("%d %d %d %d\n",*ptr1, *ptr2, *ptr3, *ptr4);
+    
+    free(ptr1);
+    free(ptr2);
+    free(ptr3);
+    free(ptr4);
+    
+    // It is an error to free the same block of memory twice.
+    // free(ptr1);
+    
+    // Nither pointers to freed memory should not be used.
+    // strcpy(ptr1,"World");
+}
+
+void func3() {
+    // String literals are character arrays stored in the code segment of the 
+    // program, which is immutable. Two string literals may share the same space in memory.
+    // The strings pointed to by str1 and str2 may actually reside in the same location in memory.
+    const char * str1 = "Hello world";
+    const char * str2 = "Hello world";
+    
+    printf("%p %p\n", str1, str2);
+    
+    // This will not work
+    // strcpy(str1, "Will not work");
+    
+    // Char arrays, however, contain the literal value which has been copied 
+    // from the code segment into either the stack or static memory. 
+    // These following char arrays do not reside in the same place in memory.
+    
+    char arr1[] = "Goodbuy World";
+    char arr2[] = "Goodbuy World";
+    
+    printf("%p %p\n", arr1, arr2);
+}
+
 
 int main() {
     func();
+    func2();
+    func3();
     
     getchar();
     return 0;
