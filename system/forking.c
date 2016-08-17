@@ -58,8 +58,6 @@ int func3(int c, char **v) {
 int main(int c, char **v) {
     //func();
     //func2();
-    
-    
-    
+
     return 0;
 }
