@@ -1,43 +1,149 @@
-#include <stdio.h>
-#include <stdlib.h>
+/* thread-barriers.c
+
+   A demonstration of the use of the pthreads barrier API.
+
+   Usage: thread-barriers num-barriers num-threads
+
+   The program creates 'num-threads' threads, each of which loop
+   'num-threads' times, waiting on the same barrier.
+*/
 #include <pthread.h>
+#include "../include/shared.h"
 
-#define N (16)
+static pthread_barrier_t barrier;
+                                /* Barrier waited on by all threads */
 
-//global variables
-pthread_mutex_t m;
-pthread_cond_t cv;
-int remain = N;
-double data[256][8192];
+static int numBarriers;         /* Number of times the threads will
+                                   pass the barrier */
 
-// When a thread reaches a barrier, it will wait at the barrier until all
-// the threads reach the barrier, and then they'll all proceed together.
+static void *
+worker(void *arg)
+{
+    int s, j, nsecs;
+    long threadNum = (long) arg;
 
-void *calc(void *ptr) {
-// Thread 0 will work on rows 0..15, thread 1 on rows 16..31
-	int x, y, start = N * (int) ptr; // Straight cast to int
-	int end = start + N;
-	for (x = start; x < end; x++)
-		for (y = 0; y < 8192; y++) { /* do calc #1 */
-		}
+    printf("Thread %ld started\n", threadNum);
 
-	pthread_mutex_lock(&m);
-	remain--;
-	if (remain == 0) {
-		pthread_cond_broadcast(&cv);
-	} else {
-		while (remain != 0) { // wait in queue and unlock mutex
-			pthread_cond_wait(&cv, &m);
-		}
-	}
-	pthread_mutex_unlock(&m);
+    /* Seed the random number generator based on the current time
+       (so that we get different seeds on each run) plus thread
+       number (so that each thread gets a unique seed). */
+
+    srandom(time(NULL) + threadNum);
+
+    /* Each thread loops, sleeping for a few seconds and then waiting
+       on the barrier. The loop terminates when each thread has passed
+       the barrier 'numBarriers' times. */
+
+    for (j = 0; j < numBarriers; j++) {
+
+        nsecs = random() % 5 + 1;       /* Sleep for 1 to 5 seconds */
+        sleep(nsecs);
+
+        /* Calling pthread_barrier_wait() causes each thread to block
+           until the call has been made by number of threads specified
+           in the pthread_barrier_init() call. */
+
+        printf("Thread %ld about to wait on barrier %d "
+                "after sleeping %d seconds\n", threadNum, j, nsecs);
+        s = pthread_barrier_wait(&barrier);
+
+        /* After the required number of threads have called
+           pthread_barrier_wait(), all of the threads unblock, and
+           the barrier is reset to the state it had after the call to
+           pthread_barrier_init(). In other words, the barrier can be
+           once again used by the threads as a synchronization point.
+
+           On success, pthread_barrier_wait() returns the special value
+           PTHREAD_BARRIER_SERIAL_THREAD in exactly one of the waiting
+           threads, and 0 in all of the other threads. This permits
+           the program to ensure that some action is performed exactly
+           once each time a barrier is passed. */
+
+        if (s == 0) {
+            printf("Thread %ld passed barrier %d: return value was 0\n",
+                    threadNum, j);
+
+        } else if (s == PTHREAD_BARRIER_SERIAL_THREAD) {
+            printf("Thread %ld passed barrier %d: return value was "
+                    "PTHREAD_BARRIER_SERIAL_THREAD\n", threadNum, j);
+
+            /* In the thread that gets the PTHREAD_BARRIER_SERIAL_THREAD
+               return value, we briefly delay, and then print a newline
+               character. This should give all of the threads a chance
+               to print the message saying they have passed the barrier,
+               and then provide a newline that separates those messages
+               from subsequent output. (The only purpose of this step
+               is to make the program output a little easier to read.) */
+
+            usleep(100000);
+            printf("\n");
+
+        } else {        /* Error */
+            fprintf(stderr, "pthread_barrier_wait (%ld)", threadNum);
+        }
+    }
+
+    /* Print out thread termination message after a briefly delaying,
+       so that the other threads have a chance to display the return
+       value they received from pthread_barrier_wait(). (This simply
+       makes the program output a little easier to read.)*/
+
+    usleep(200000);
+    printf("Thread %ld terminating\n", threadNum);
+
+    return NULL;
 }
 
-int main() {
-	pthread_mutex_init(&m, NULL);
-	pthread_cond_init(&cv, NULL);
+int
+main(int argc, char *argv[])
+{
+    int s, numThreads;
+    long threadNum;
+    pthread_t *tid;
 
-	pthread_t ids[N];
-	for (int i = 0; i < N; i++)
-		pthread_create(&ids[i], NULL, calc, (void *) i);
+    if (argc != 3 || strcmp(argv[1], "--help") == 0)
+        fprintf(stderr, "%s num-barriers num-threads\n", argv[0]);
+
+    numBarriers = 2;
+    numThreads = 10;
+
+    /* Allocate array to hold thread IDs */
+
+    tid = calloc(sizeof(pthread_t), numThreads);
+    if (tid == NULL)
+        exit(EXIT_FAILURE);
+
+    /* Initialize the barrier. The final argument specifies the
+       number of threads that must call pthread_barrier_wait()
+       before any thread will unblock from that call. */
+
+    s = pthread_barrier_init(&barrier, NULL, numThreads);
+    if (s != 0)
+        exit(EXIT_FAILURE);
+
+    /* Create 'numThreads' threads */
+
+    for (threadNum = 0; threadNum < numThreads; threadNum++) {
+        s = pthread_create(&tid[threadNum], NULL, worker,
+                (void *) threadNum);
+        if (s != 0)
+            exit(EXIT_FAILURE);
+    }
+
+    /* Each thread prints a start-up message. We briefly delay,
+       and then print a newline character so that an empty line
+       appears after the start-up messages. */
+
+    usleep(100000);
+    printf("\n");
+
+    /* Wait for all of the threads to terminate */
+
+    for (threadNum = 0; threadNum < numThreads; threadNum++) {
+        s = pthread_join(tid[threadNum], NULL);
+        if (s != 0)
+            exit(EXIT_FAILURE);
+    }
+
+    exit(EXIT_SUCCESS);
 }
